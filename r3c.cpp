@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include "r3c.h"
+#include "sha1.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -186,6 +187,27 @@ std::string ip2string(uint32_t ip)
     struct in_addr in;
     in.s_addr = ip;
     return inet_ntoa(in);
+}
+
+std::string strsha1(const std::string& str)
+{
+    static unsigned char hex_table[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+
+    std::string result(40, '\0'); // f3512504d8a2f422b45faad2f2f44d569a963da1
+    unsigned char hash[20];
+    SHA1_CTX ctx;
+
+    SHA1Init(&ctx);
+    SHA1Update(&ctx, (const unsigned char*)str.data(), str.size());
+    SHA1Final(hash, &ctx);
+
+    for (size_t i=0,j=0; i<sizeof(hash)/sizeof(hash[0]); ++i,j+=2)
+    {
+        result[j] = hex_table[(hash[i] >> 4) & 0x0f];
+        result[j+1] = hex_table[hash[i] & 0x0f];
+    }
+
+    return result;
 }
 
 int split(std::vector<std::string>* tokens, const std::string& source, const std::string& sep, bool skip_sep)
@@ -748,6 +770,7 @@ bool CRedisClient::expire(const std::string& key, uint32_t seconds, std::pair<st
     return result > 0;
 }
 
+// EVAL script numkeys key [key ...] arg [arg ...]
 const RedisReplyHelper CRedisClient::eval(const std::string& key, const std::string& lua_scripts, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
     const int excepted_reply_type = -1;
@@ -768,6 +791,68 @@ const RedisReplyHelper CRedisClient::eval(const std::string& key, const std::str
 
     const std::string command_string;
     const redisReply* redis_reply = redis_command(excepted_reply_type, which, &key, "EVAL", command_string, argc, (const char**)argv, argv_len);
+    return RedisReplyHelper(redis_reply);
+}
+
+// EVAL script numkeys key [key ...] arg [arg ...]
+// EVALSHA sha1 numkeys key [key ...] arg [arg ...]
+//
+// r3c_cmd eval 123456 "local n; n=redis.call('setnx',KEYS[1],ARGV[1]); if (n>0) then redis.call('expire', KEYS[1], ARGV[2]) end; return n;" abcdefg 10
+const RedisReplyHelper CRedisClient::eval(const std::string& key, const std::string& lua_scripts, const std::vector<std::string>& parameters, std::pair<std::string, uint16_t>* which) throw (CRedisException)
+{
+    return do_eval("EVAL", key, lua_scripts, parameters, which);
+}
+
+const RedisReplyHelper CRedisClient::evalsha(const std::string& key, const std::string& sha1, const std::vector<std::string>& parameters, std::pair<std::string, uint16_t>* which) throw (CRedisException)
+{
+    return do_eval("EVALSHA", key, sha1, parameters, which);
+}
+
+const RedisReplyHelper CRedisClient::do_eval(const char* eval_command, const std::string& key, const std::string& lua_script_or_sha1, const std::vector<std::string>& parameters, std::pair<std::string, uint16_t>* which) throw (CRedisException)
+{
+    const int excepted_reply_type = -1;
+
+    // 3: EVAL script 1 key
+    const int argc = 4 + static_cast<int>(parameters.size());
+    size_t* argv_len = new size_t[argc];
+    char** argv = new char*[argc];
+    int argv_len_index = 0;
+
+    // EVAL/EVALSHA
+    argv_len[argv_len_index] = strlen(eval_command);
+    argv[argv_len_index] = new char[argv_len[argv_len_index]+1];
+    strncpy(argv[argv_len_index], eval_command, argv_len[argv_len_index]+1);
+    ++argv_len_index;
+
+    // script/sha1
+    argv_len[argv_len_index] = lua_script_or_sha1.size();
+    argv[argv_len_index] = new char[argv_len[argv_len_index]+1];
+    strncpy(argv[argv_len_index], lua_script_or_sha1.c_str(), argv_len[argv_len_index]+1);
+    ++argv_len_index;
+
+    // numkeys
+    argv_len[argv_len_index] = 1;
+    argv[argv_len_index] = new char[argv_len[argv_len_index]+1];
+    strncpy(argv[argv_len_index], "1", argv_len[argv_len_index]+1);
+    ++argv_len_index;
+
+    // key
+    argv_len[argv_len_index] = key.size();
+    argv[argv_len_index] = new char[argv_len[argv_len_index]+1];
+    strncpy(argv[argv_len_index], key.c_str(), argv_len[argv_len_index]+1);
+    ++argv_len_index;
+
+    for (std::vector<std::string>::size_type i=0; i<parameters.size(); ++i)
+    {
+        argv_len[argv_len_index] = parameters[i].size();
+        argv[argv_len_index] = new char[argv_len[argv_len_index]+1];
+        strncpy(argv[argv_len_index], parameters[i].c_str(), argv_len[argv_len_index]+1);
+        ++argv_len_index;
+    }
+
+    FreeArgvHelper fah(argc, argv, argv_len);
+    const std::string command_string;
+    const redisReply* redis_reply = redis_command(excepted_reply_type, which, &key, eval_command, command_string, argc, (const char**)argv, argv_len);
     return RedisReplyHelper(redis_reply);
 }
 
@@ -803,16 +888,46 @@ void CRedisClient::setex(const std::string& key, const std::string& value, uint3
 
 bool CRedisClient::setnxex(const std::string& key, const std::string& value, uint32_t expired_seconds, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    const std::string lua_scripts = format_string("local n; n=redis.call('setnx','%s','%s'); if (n>0) then redis.call('expire', '%s', '%u') end; return n;", key.c_str(), value.c_str(), key.c_str(), expired_seconds);
-    const RedisReplyHelper redis_reply = eval(key, lua_scripts, which);
+    std::vector<std::string> parameters(2);
+    parameters[0] = value;
+    parameters[1] = any2string(expired_seconds);
 
-    if (redis_reply->type != REDIS_REPLY_INTEGER)
+    const std::string lua_scripts = format_string("local n;n=redis.call('setnx',KEYS[1],ARGV[1]);if (n>0) then redis.call('expire',KEYS[1],ARGV[2]) end;return n;");
+    const std::string sha1 = strsha1(lua_scripts);
+
+    try
     {
-        THROW_REDIS_EXCEPTION_WITH_NODE_AND_COMMAND(redis_reply->type, "unexpected type", which->first, which->second, "SETNXEX", NULL);
+        const RedisReplyHelper redis_reply = evalsha(key, sha1, parameters, which);
+        if (redis_reply->type != REDIS_REPLY_INTEGER)
+        {
+            THROW_REDIS_EXCEPTION_WITH_NODE_AND_COMMAND(redis_reply->type, "unexpected type", which->first, which->second, "SETNXEX", NULL);
+        }
+        else
+        {
+            return redis_reply->integer > 0;
+        }
     }
+    catch (CRedisException& ex)
+    {
+        if (ex.errcode() != ERROR_NOSCRIPT)
+        {
+            throw;
+        }
+        else
+        {
+            (*g_debug_log)("[%s:%d] sha1 not exists: %s\n", __FILE__, __LINE__, sha1.c_str());
 
-    int ret = static_cast<int>(redis_reply->integer);
-    return ret > 0;
+            const RedisReplyHelper redis_reply = eval(key, lua_scripts, parameters, which);
+            if (redis_reply->type != REDIS_REPLY_INTEGER)
+            {
+                THROW_REDIS_EXCEPTION_WITH_NODE_AND_COMMAND(redis_reply->type, "unexpected type", which->first, which->second, "SETNXEX", NULL);
+            }
+            else
+            {
+                return redis_reply->integer > 0;
+            }
+        }
+    }
 }
 
 bool CRedisClient::get(const std::string& key, std::string* value, std::pair<std::string, uint16_t>* which) throw (CRedisException)
@@ -1090,30 +1205,17 @@ int64_t CRedisClient::hincrby(const std::string& key, const std::string& field, 
 
 void CRedisClient::hmincrby(const std::string& key, const std::vector<std::pair<std::string, int64_t> >& increments, std::vector<int64_t>* values, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    int m = 0;
-    std::string lua_scripts;
-    for (std::vector<std::pair<std::string, int64_t> >::size_type i=0; i<increments.size(); ++i,++m)
+    const std::string lua_scripts = format_string("local j=1;local results={};for i=1,#ARGV,2 do local f=ARGV[i];local v=ARGV[i+1];results[j]=redis.call('hincrby','%s',f,v);j=j+1; end;return results;", key.c_str());
+
+    std::vector<std::string> parameters(2*increments.size());
+    for (std::vector<std::pair<std::string, int64_t> >::size_type i=0,j=0; i<increments.size(); ++i,j+=2)
     {
-        const std::string& field = increments[i].first;
-        const int64_t increment = increments[i].second;
-        if (lua_scripts.empty())
-            lua_scripts = format_string("local r%d;r%d=redis.call('hincrby','%s','%s','%" PRId64"')", m, m, key.c_str(), field.c_str(), increment);
-        else
-            lua_scripts += format_string(";local r%d;r%d=redis.call('hincrby','%s','%s','%" PRId64"')", m, m, key.c_str(), field.c_str(), increment);
+        parameters[j] = increments[i].first;
+        parameters[j+1] = any2string(increments[i].second);
     }
 
-    lua_scripts += std::string(";return {");
-    for (int n=0; n<m; ++n)
-    {
-        if (0 == n)
-            lua_scripts += format_string("r%d", n);
-        else
-            lua_scripts += format_string(",r%d", n);
-    }
-    lua_scripts += std::string("}");
     (*g_debug_log)("[%s:%d]lua scripts: \n%s\n", __FILE__, __LINE__, lua_scripts.c_str());
-
-    const RedisReplyHelper redis_reply = eval(key, lua_scripts, which);
+    const RedisReplyHelper redis_reply = eval(key, lua_scripts, parameters, which);
     if (redis_reply->type != REDIS_REPLY_ARRAY)
     {
         int type = redis_reply->type;
@@ -1715,11 +1817,20 @@ const redisReply* CRedisClient::redis_command(int excepted_reply_type, std::pair
             // disconnnected
             errcode = ERROR_COMMAND;
             errmsg = format_string("redis `%s` error", command);
-            (*g_error_log)("[%s:%d][%d/%d][%s][%s:%d](%d)%s|(%d)%s\n", __FILE__, __LINE__, i, _retry_times, command, node.first.c_str(), node.second, errcode, errmsg.c_str(), redis_context->err, redis_context->errstr);
+            (*g_error_log)("[%s:%d][%d/%d][%s][%s:%d](%d)%s|(%d, %d)%s\n", __FILE__, __LINE__, i, _retry_times, command, node.first.c_str(), node.second, errcode, errmsg.c_str(), errno, redis_context->err, redis_context->errstr);
 
-            init();
-            retry_sleep();
-            continue;
+            if ((EAGAIN == errno) || (EWOULDBLOCK == errno))
+            {
+                // Resource temporarily unavailable
+                // 对于超时，不能重试，也许成功了，结果是不确定的！！！
+                break;
+            }
+            else
+            {
+                init();
+                retry_sleep();
+                continue;
+            }
         }
         else
         {
@@ -1751,10 +1862,16 @@ const redisReply* CRedisClient::redis_command(int excepted_reply_type, std::pair
                 // LOADING Redis is loading the dataset in memory （需重试错误）
                 // MOVED 6474 127.0.0.1:6380 （需重试错误）
                 // ERR wrong number of arguments for 'sadd' command|(0)（此种错误时不需重试）
+                // NOSCRIPT No matching script. Please use EVAL.
                 (*g_error_log)("[%s:%d][%d/%d][%s][%s:%d](%d)%s|(%d)%s\n", __FILE__, __LINE__, i, _retry_times, command, node.first.c_str(), node.second, errcode, errmsg.c_str(), redis_context->err, redis_context->errstr);
                 if ((0 == strncmp(errmsg.c_str(), "WRONGTYPE", sizeof("WRONGTYPE")-1)) ||
                     (0 == strncmp(errmsg.c_str(), "ERR", sizeof("ERR")-1)))
                 {
+                    break;
+                }
+                else if (0 == strncmp(errmsg.c_str(), "NOSCRIPT", sizeof("NOSCRIPT")-1))
+                {
+                    errcode = ERROR_NOSCRIPT;
                     break;
                 }
                 else

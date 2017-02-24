@@ -93,7 +93,18 @@ int main(int argc, char* argv[])
         std::pair<std::string, uint16_t> which_node;
         r3c::CRedisClient redis_client(nodes);
 
-        if (0 == strcasecmp(cmd, "slot"))
+        if (0 == strcasecmp(cmd, "sha1"))
+        {
+            if (argc != 3)
+            {
+                fprintf(stderr, "Usage: r3c_cmd sha1 string\n");
+                exit(1);
+            }
+
+            str =  key;
+            fprintf(stdout, "%s\n", r3c::strsha1(str).c_str());
+        }
+        else if (0 == strcasecmp(cmd, "slot"))
         {
             if (argc != 3)
             {
@@ -183,19 +194,56 @@ int main(int argc, char* argv[])
             else
                 fprintf(stderr, "[%s] not exist\n", key);
         }
-        else if (0 == strcasecmp(cmd, "eval"))
+        else if ((0 == strcasecmp(cmd, "eval")) || (0 == strcasecmp(cmd, "evalsha")))
         {
-            // EVAL command
-            if (argc != 4)
+            // EVAL/EVALSHA command
+            if (argc < 4)
             {
-                fprintf(stderr, "Usage: r3c_cmd eval key lua_scripts\n");
+                if (0 == strcasecmp(cmd, "eval"))
+                {
+                    fprintf(stderr, "Usage1: r3c_cmd EVAL key lua_scripts\n");
+                    fprintf(stderr, "Usage1: r3c_cmd EVAL key lua_scripts parameter1 parameter2 ...\n");
+                }
+                else
+                {
+                    fprintf(stderr, "Usage1: r3c_cmd EVALSHA key sha1\n");
+                    fprintf(stderr, "Usage1: r3c_cmd EVALSHA key sha1 parameter1 parameter2 ...\n");
+                }
+
                 exit(1);
             }
 
-            const char* lua_scripts = argv[3];
-            const r3c::RedisReplyHelper reply = redis_client.eval(key, lua_scripts, &which_node);
-            if (reply)
-                std::cout << reply;
+            if (4 == argc)
+            {
+                const char* lua_scripts_or_sha1 = argv[3];
+                if (0 == strcasecmp(cmd, "eval"))
+                {
+                    const r3c::RedisReplyHelper reply = redis_client.eval(key, lua_scripts_or_sha1, &which_node);
+                    if (reply)
+                        std::cout << reply;
+                }
+            }
+            else
+            {
+                const char* lua_scripts_or_sha1 = argv[3];
+                std::vector<std::string> parameters(argc-4);
+
+                for (int i=4; i<argc; ++i)
+                    parameters[i-4] = argv[i];
+
+                if (0 == strcasecmp(cmd, "eval"))
+                {
+                    const r3c::RedisReplyHelper reply = redis_client.eval(key, lua_scripts_or_sha1, parameters, &which_node);
+                    if (reply)
+                        std::cout << reply;
+                }
+                else
+                {
+                    const r3c::RedisReplyHelper reply = redis_client.evalsha(key, lua_scripts_or_sha1, parameters, &which_node);
+                    if (reply)
+                        std::cout << reply;
+                }
+            }
         }
         else if (0 == strcasecmp(cmd, "ttl"))
         {

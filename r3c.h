@@ -80,22 +80,24 @@ enum
     ERROR_CONNECT_REDIS = -4,  // Can not connect any cluster node
     ERROR_FORMAT = -5,         // Format error
     ERROR_NOT_SUPPORT = -6,    // Not support
-    ERROR_SLOT_NOT_EXIST = -7  // Slot not exists
+    ERROR_SLOT_NOT_EXIST = -7, // Slot not exists
+    ERROR_NOSCRIPT = -8        // NOSCRIPT No matching script
 };
 
 // Consts
 enum
 {
-    RETRY_TIMES = 10,                    // Default value
-    RETRY_SLEEP_MILLISECONDS = 1000,     // Default value
+    RETRY_TIMES = 3,                     // Default value
+    RETRY_SLEEP_MILLISECONDS = 1000,     // Default value, sleep 1000ms to retry
     CONNECT_TIMEOUT_MILLISECONDS = 1000, // Connect timeout milliseconds
-    DATA_TIMEOUT_MILLISECONDS = 2000     // Read and write socket timeout milliseconds
+    DATA_TIMEOUT_MILLISECONDS = 1000     // Read and write socket timeout milliseconds
 };
 
 void millisleep(uint32_t millisecond);
 void free_redis_reply(const redisReply* redis_reply);
 std::string format_string(const char* format, ...) __attribute__((format(printf, 1, 2)));
 std::string ip2string(uint32_t ip);
+std::string strsha1(const std::string& str);
 int split(std::vector<std::string>* tokens, const std::string& source, const std::string& sep, bool skip_sep=false);
 
 // Cluster node info
@@ -144,6 +146,7 @@ public:
     CRedisException(int errcode, const std::string& errmsg, const char* file, int line, const std::string& node_ip=std::string("-"), uint16_t node_port=0, const char* command=NULL, const char* key=NULL) throw ();
     virtual ~CRedisException() throw () {}
     virtual const char* what() const throw ();
+    int errcode() const { return _errcode; }
     std::string str() const throw ();
 
     const char* file() const throw () { return _file.c_str(); }
@@ -258,6 +261,8 @@ public:
     // nodes - Redis cluster nodes separated by comma,
     //         e.g., 127.0.0.1:6379,127.0.0.1:6380,127.0.0.2:6379,127.0.0.3:6379,
     //         standalone mode if only one node, else cluster mode.
+    //
+    // NOTICE: CRedisClient will not retry if read/write timeout, because the result is uncertain.
     CRedisClient(const std::string& nodes, int connect_timeout_milliseconds=CONNECT_TIMEOUT_MILLISECONDS, int data_timeout_milliseconds=DATA_TIMEOUT_MILLISECONDS) throw (CRedisException);
     ~CRedisClient();
 
@@ -281,6 +286,8 @@ public:
 
     // Evaluate scripts using the Lua interpreter built
     const RedisReplyHelper eval(const std::string& key, const std::string& lua_scripts, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
+    const RedisReplyHelper eval(const std::string& key, const std::string& lua_scripts, const std::vector<std::string>& parameters, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
+    const RedisReplyHelper evalsha(const std::string& key, const std::string& sha1, const std::vector<std::string>& parameters, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
 
     // Success returns the remaining time to live of a key that has a timeout
     // Returns -2 if the key does not exist
@@ -417,6 +424,11 @@ private:
     const redisReply* redis_command(int excepted_reply_type, std::pair<std::string, uint16_t>* which, const std::string* key, const char* command, const std::string& command_string, int argc, const char* argv[], const size_t* argv_len) throw (CRedisException);
     int64_t redis_command(int excepted_reply_type, struct ParamInfo* param_info) throw (CRedisException);
     int calc_argc(const struct ParamInfo* param_info) const;
+
+private:
+    // eval_command EVAL or EVALSHA
+    // lua_script_or_sha1 lua script or sha1 string
+    const RedisReplyHelper do_eval(const char* eval_command, const std::string& key, const std::string& lua_script_or_sha1, const std::vector<std::string>& parameters, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
 
 private:
     void parse_nodes() throw (CRedisException);
