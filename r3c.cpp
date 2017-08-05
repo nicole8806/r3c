@@ -479,8 +479,8 @@ struct ParamInfo
     }
 };
 
-CRedisClient::CRedisClient(const std::string& nodes, int connect_timeout_milliseconds, int data_timeout_milliseconds) throw (CRedisException)
-    : _cluster_mode(false), _nodes_string(nodes),
+CRedisClient::CRedisClient(const std::string& nodes, int connect_timeout_milliseconds, int data_timeout_milliseconds, const std::string& password) throw (CRedisException)
+    : _cluster_mode(false), _password(password), _nodes_string(nodes),
       _connect_timeout_milliseconds(connect_timeout_milliseconds), _data_timeout_milliseconds(data_timeout_milliseconds),
       _retry_times(RETRY_TIMES), _retry_sleep_milliseconds(RETRY_SLEEP_MILLISECONDS),
       _redis_context(NULL), _slots(CLUSTER_SLOTS, NULL)
@@ -686,6 +686,7 @@ void CRedisClient::flushall(std::vector<std::pair<std::string, std::string> >* r
             if (_connect_timeout_milliseconds <= 0)
             {
                 redis_context = redisConnect(node_info.ip.c_str(), node_info.port);
+				
             }
             else
             {
@@ -695,12 +696,25 @@ void CRedisClient::flushall(std::vector<std::pair<std::string, std::string> >* r
                 redis_context = redisConnectWithTimeout(node_info.ip.c_str(), node_info.port, timeout);
             }
 
+			
+
             if (NULL == redis_context)
             {
                 pair.second = "INVALID CONTEXT";
             }
             else
             {
+				if(_password.size() > 0)
+				{
+					redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
+					if (NULL == redis_reply)
+					{
+						(*g_error_log)("[%s:%d]auth failure\n", __FILE__, __LINE__);						
+					}
+
+				}
+                           
+               
                 redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "FLUSHALL");
                 if (NULL == redis_reply)
                 {
@@ -888,46 +902,16 @@ void CRedisClient::setex(const std::string& key, const std::string& value, uint3
 
 bool CRedisClient::setnxex(const std::string& key, const std::string& value, uint32_t expired_seconds, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    std::vector<std::string> parameters(2);
-    parameters[0] = value;
-    parameters[1] = any2string(expired_seconds);
+    const std::string str2 = "NX";
+    const std::string str3 = "EX";
+    const std::string str4 = any2string(expired_seconds);
+    struct ParamInfo param_info("SET", sizeof("SET")-1, &key, which);
+    param_info.str1 = &value;
+    param_info.str2 = &str2;
+    param_info.str3 = &str3;
+    param_info.str4 = &str4;
 
-    const std::string lua_scripts = format_string("local n;n=redis.call('setnx',KEYS[1],ARGV[1]);if (n>0) then redis.call('expire',KEYS[1],ARGV[2]) end;return n;");
-    const std::string sha1 = strsha1(lua_scripts);
-
-    try
-    {
-        const RedisReplyHelper redis_reply = evalsha(key, sha1, parameters, which);
-        if (redis_reply->type != REDIS_REPLY_INTEGER)
-        {
-            THROW_REDIS_EXCEPTION_WITH_NODE_AND_COMMAND(redis_reply->type, "unexpected type", which->first, which->second, "SETNXEX", NULL);
-        }
-        else
-        {
-            return redis_reply->integer > 0;
-        }
-    }
-    catch (CRedisException& ex)
-    {
-        if (ex.errcode() != ERROR_NOSCRIPT)
-        {
-            throw;
-        }
-        else
-        {
-            (*g_debug_log)("[%s:%d] sha1 not exists: %s\n", __FILE__, __LINE__, sha1.c_str());
-
-            const RedisReplyHelper redis_reply = eval(key, lua_scripts, parameters, which);
-            if (redis_reply->type != REDIS_REPLY_INTEGER)
-            {
-                THROW_REDIS_EXCEPTION_WITH_NODE_AND_COMMAND(redis_reply->type, "unexpected type", which->first, which->second, "SETNXEX", NULL);
-            }
-            else
-            {
-                return redis_reply->integer > 0;
-            }
-        }
-    }
+    return redis_command(REDIS_REPLY_STATUS, &param_info) > 0;
 }
 
 bool CRedisClient::get(const std::string& key, std::string* value, std::pair<std::string, uint16_t>* which) throw (CRedisException)
@@ -936,6 +920,15 @@ bool CRedisClient::get(const std::string& key, std::string* value, std::pair<std
     param_info.value = value;
     redis_command(REDIS_REPLY_STRING, &param_info);
     return !value->empty();
+}
+
+int64_t CRedisClient::mget(const std::vector<std::string>& keys, std::vector<std::string>* values,
+                           std::pair<std::string, uint16_t>* which) throw (CRedisException)
+{
+    struct ParamInfo param_info("MGET", sizeof("MGET")-1, NULL, which);
+    param_info.array = &keys;
+    param_info.values = values;
+    return redis_command(REDIS_REPLY_ARRAY, &param_info);
 }
 
 bool CRedisClient::del(const std::string& key, std::pair<std::string, uint16_t>* which) throw (CRedisException)
@@ -1599,10 +1592,10 @@ int CRedisClient::zrangebyscore(const std::string& key, int64_t min, int64_t max
     return static_cast<int>(result);
 }
 
-int CRedisClient::zrevrangebyscore(const std::string& key, int64_t min, int64_t max, bool withscores, std::vector<std::pair<std::string, int64_t> >* vec, std::pair<std::string, uint16_t>* which) throw (CRedisException)
+int CRedisClient::zrevrangebyscore(const std::string& key, int64_t max, int64_t min, bool withscores, std::vector<std::pair<std::string, int64_t> >* vec, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    const std::string str7 = any2string(min);
-    const std::string str6 = any2string(max);
+    const std::string str6 = any2string(min);
+    const std::string str7 = any2string(max);
     struct ParamInfo param_info("ZREVRANGEBYSCORE", sizeof("ZREVRANGEBYSCORE")-1, &key, which);
 
     param_info.str6 = &str6;
@@ -2326,6 +2319,7 @@ redisContext* CRedisClient::get_redis_context(unsigned int slot, std::pair<std::
             if (_connect_timeout_milliseconds <= 0)
             {
                 redis_context = redisConnect(node->first.c_str(), node->second);
+				
             }
             else
             {
@@ -2335,6 +2329,8 @@ redisContext* CRedisClient::get_redis_context(unsigned int slot, std::pair<std::
                 redis_context = redisConnectWithTimeout(node->first.c_str(), node->second, connect_timeout);
             }
 
+			
+
             _redis_context = redis_context;
             if (NULL == redis_context)
             {
@@ -2342,6 +2338,15 @@ redisContext* CRedisClient::get_redis_context(unsigned int slot, std::pair<std::
             }
             else if (_data_timeout_milliseconds > 0)
             {
+				if(_password.size() > 0)
+				{
+					redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
+					if (NULL == redis_reply)
+					{
+						(*g_error_log)("[%s:%d]auth failure\n", __FILE__, __LINE__);		
+					}
+
+				}
                 struct timeval data_timeout;
                 data_timeout.tv_sec = _data_timeout_milliseconds / 1000;
                 data_timeout.tv_usec = (_data_timeout_milliseconds % 1000) * 1000;
@@ -2385,6 +2390,7 @@ redisContext* CRedisClient::get_redis_context(unsigned int slot, std::pair<std::
                         if (_connect_timeout_milliseconds <= 0)
                         {
                             redis_context = redisConnect(node->first.c_str(), node->second);
+							
                         }
                         else
                         {
@@ -2399,7 +2405,16 @@ redisContext* CRedisClient::get_redis_context(unsigned int slot, std::pair<std::
                             (*g_error_log)("[%s:%d]slot[%u] redisConnect failed\n", __FILE__, __LINE__, slot);
                         }
                         else
-                        {
+                        {                            
+							if(_password.size() > 0)
+							{
+								redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
+								if (NULL == redis_reply)
+								{
+									(*g_error_log)("[%s:%d]auth failure\n", __FILE__, __LINE__);		
+								}
+
+							}
                             slot_info->redis_context = redis_context;
                             _redis_contexts.insert(std::make_pair(slot_info->node, redis_context));
 
@@ -2449,6 +2464,7 @@ redisContext* CRedisClient::connect_node(int* errcode, std::string* errmsg, std:
         if (_connect_timeout_milliseconds <= 0)
         {
             redis_context = redisConnect(node->first.c_str(), node->second);
+			
         }
         else
         {
@@ -2467,6 +2483,15 @@ redisContext* CRedisClient::connect_node(int* errcode, std::string* errmsg, std:
         }
         else
         {
+			if(_password.size() > 0)
+			{
+				redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
+				if (NULL == redis_reply)
+				{
+					(*g_error_log)("[%s:%d]auth failure\n", __FILE__, __LINE__);		
+				}
+
+			}
             if (0 == redis_context->err)
             {
                 if (_data_timeout_milliseconds <= 0)

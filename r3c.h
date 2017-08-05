@@ -263,7 +263,7 @@ public:
     //         standalone mode if only one node, else cluster mode.
     //
     // NOTICE: CRedisClient will not retry if read/write timeout, because the result is uncertain.
-    CRedisClient(const std::string& nodes, int connect_timeout_milliseconds=CONNECT_TIMEOUT_MILLISECONDS, int data_timeout_milliseconds=DATA_TIMEOUT_MILLISECONDS) throw (CRedisException);
+    CRedisClient(const std::string& nodes, int connect_timeout_milliseconds=CONNECT_TIMEOUT_MILLISECONDS, int data_timeout_milliseconds=DATA_TIMEOUT_MILLISECONDS, const std::string& password=std::string("")) throw (CRedisException);
     ~CRedisClient();
 
     bool cluster_mode() const;
@@ -298,6 +298,8 @@ public:
     void setex(const std::string& key, const std::string& value, uint32_t expired_seconds, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool setnxex(const std::string& key, const std::string& value, uint32_t expired_seconds, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool get(const std::string& key, std::string* value, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
+    int64_t mget(const std::vector<std::string>& keys, std::vector<std::string>* values,
+        std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool del(const std::string& key, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     int64_t incrby(const std::string& key, int64_t increment, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
 
@@ -332,6 +334,8 @@ public:
     int hmdel(const std::string& key, const std::vector<std::string>& fields, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool hexists(const std::string& key, const std::string& field, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     int hlen(const std::string& key, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
+
+    // if field not exists return true, or return false
     bool hset(const std::string& key, const std::string& field, const std::string& value, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool hsetex(const std::string& key, const std::string& field, const std::string& value, uint32_t timeout_seconds, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool hsetnx(const std::string& key, const std::string& field, const std::string& value, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
@@ -402,7 +406,7 @@ public:
     // Keep in mind that if offset is large, the sorted set needs to be traversed for offset elements before getting to the elements to return,
     // which can add up to O(N) time complexity.
     int zrangebyscore(const std::string& key, int64_t min, int64_t max, int64_t offset, int64_t count, bool withscores, std::vector<std::pair<std::string, int64_t> >* vec, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
-    int zrevrangebyscore(const std::string& key, int64_t min, int64_t max, int64_t offset, int64_t count, bool withscores, std::vector<std::pair<std::string, int64_t> >* vec, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
+    int zrevrangebyscore(const std::string& key, int64_t max, int64_t min, int64_t offset, int64_t count, bool withscores, std::vector<std::pair<std::string, int64_t> >* vec, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
 
     // Return -1 if field not exists
     int zrank(const std::string& key, const std::string& field, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
@@ -445,6 +449,7 @@ private:
 
 private:
     bool _cluster_mode;
+    std::string _password;
     std::string _nodes_string;
     int _connect_timeout_milliseconds;
     int _data_timeout_milliseconds; // read & write timeout
