@@ -74,14 +74,18 @@ enum ZADDFLAG
 // Error code
 enum
 {
-    ERR_PARAMETER = -1,        // Parameter error
-    ERR_INIT_REDIS_CONN = -2,  // Initialize redis connection error
-    ERROR_COMMAND = -3,        // Command error
-    ERROR_CONNECT_REDIS = -4,  // Can not connect any cluster node
-    ERROR_FORMAT = -5,         // Format error
-    ERROR_NOT_SUPPORT = -6,    // Not support
-    ERROR_SLOT_NOT_EXIST = -7, // Slot not exists
-    ERROR_NOSCRIPT = -8        // NOSCRIPT No matching script
+    ERR_PARAMETER = -1,            // Parameter error
+    ERR_INIT_REDIS_CONN = -2,      // Initialize redis connection error
+    ERROR_COMMAND = -3,            // Command error
+    ERROR_CONNECT_REDIS = -4,      // Can not connect any cluster node
+    ERROR_FORMAT = -5,             // Format error
+    ERROR_NOT_SUPPORT = -6,        // Not support
+    ERROR_SLOT_NOT_EXIST = -7,     // Slot not exists
+    ERROR_NOSCRIPT = -8,           // NOSCRIPT No matching script
+    ERROR_UNKNOWN_REPLY_TYPE = -9, // unknhown reply type
+    ERROR_NIL = -10,               // Redis return Nil
+    ERROR_INVALID_COMMAND = -11,   // Invalid command
+    ERROR_ZERO_KEY = -12           // Key size is zero
 };
 
 // Consts
@@ -300,6 +304,8 @@ public:
     bool get(const std::string& key, std::string* value, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     int64_t mget(const std::vector<std::string>& keys, std::vector<std::string>* values,
         std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
+    void mset(const std::map<std::string, std::string>& kv_map,
+        std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool del(const std::string& key, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     int64_t incrby(const std::string& key, int64_t increment, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
 
@@ -334,8 +340,6 @@ public:
     int hmdel(const std::string& key, const std::vector<std::string>& fields, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool hexists(const std::string& key, const std::string& field, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     int hlen(const std::string& key, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
-
-    // if field not exists return true, or return false
     bool hset(const std::string& key, const std::string& field, const std::string& value, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool hsetex(const std::string& key, const std::string& field, const std::string& value, uint32_t timeout_seconds, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
     bool hsetnx(const std::string& key, const std::string& field, const std::string& value, std::pair<std::string, uint16_t>* which=NULL) throw (CRedisException);
@@ -446,6 +450,7 @@ private:
     void clear_redis_contexts();
     void clear_slots();
     void retry_sleep() const;
+    void reset_redis_context(unsigned int slot);
 
 private:
     bool _cluster_mode;

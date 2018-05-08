@@ -902,24 +902,43 @@ void CRedisClient::setex(const std::string& key, const std::string& value, uint3
 
 bool CRedisClient::setnxex(const std::string& key, const std::string& value, uint32_t expired_seconds, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    const std::string str2 = "NX";
-    const std::string str3 = "EX";
-    const std::string str4 = any2string(expired_seconds);
-    struct ParamInfo param_info("SET", sizeof("SET")-1, &key, which);
-    param_info.str1 = &value;
-    param_info.str2 = &str2;
-    param_info.str3 = &str3;
-    param_info.str4 = &str4;
+    try
+    {
+        const std::string str2 = "NX";
+        const std::string str3 = "EX";
+        const std::string str4 = any2string(expired_seconds);
+        struct ParamInfo param_info("SET", sizeof("SET")-1, &key, which);
+        param_info.str1 = &value;
+        param_info.str2 = &str2;
+        param_info.str3 = &str3;
+        param_info.str4 = &str4;
 
-    return redis_command(REDIS_REPLY_STATUS, &param_info) > 0;
+        (void)redis_command(REDIS_REPLY_STATUS, &param_info);
+        return true;
+    }
+    catch (CRedisException& ex)
+    {
+        if (ERROR_NIL == ex.errcode())
+            return false;
+        throw;
+    }
 }
 
 bool CRedisClient::get(const std::string& key, std::string* value, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    struct ParamInfo param_info("GET", sizeof("GET")-1, &key, which);
-    param_info.value = value;
-    redis_command(REDIS_REPLY_STRING, &param_info);
-    return !value->empty();
+    try
+    {
+        struct ParamInfo param_info("GET", sizeof("GET")-1, &key, which);
+        param_info.value = value;
+        (void)redis_command(REDIS_REPLY_STRING, &param_info);
+        return true;
+    }
+    catch (CRedisException& ex)
+    {
+        if (ERROR_NIL == ex.errcode())
+            return false;
+        throw;
+    }
 }
 
 int64_t CRedisClient::mget(const std::vector<std::string>& keys, std::vector<std::string>* values,
@@ -929,6 +948,14 @@ int64_t CRedisClient::mget(const std::vector<std::string>& keys, std::vector<std
     param_info.array = &keys;
     param_info.values = values;
     return redis_command(REDIS_REPLY_ARRAY, &param_info);
+}
+
+void CRedisClient::mset(const std::map<std::string, std::string>& kv_map,
+                        std::pair<std::string, uint16_t>* which) throw (CRedisException)
+{
+    struct ParamInfo param_info("MSET", sizeof("MSET")-1, NULL, which);
+    param_info.in_map1 = &kv_map;
+    (void)redis_command(REDIS_REPLY_STATUS, &param_info);
 }
 
 bool CRedisClient::del(const std::string& key, std::pair<std::string, uint16_t>* which) throw (CRedisException)
@@ -1025,10 +1052,19 @@ int CRedisClient::llen(const std::string& key, std::pair<std::string, uint16_t>*
 
 bool CRedisClient::lpop(const std::string& key, std::string* value, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    struct ParamInfo param_info("LPOP", sizeof("LPOP")-1, &key, which);
-    param_info.value = value;
-    (void)redis_command(REDIS_REPLY_STRING, &param_info);
-    return !value->empty();
+    try
+    {
+        struct ParamInfo param_info("LPOP", sizeof("LPOP")-1, &key, which);
+        param_info.value = value;
+        (void)redis_command(REDIS_REPLY_STRING, &param_info);
+        return true;
+    }
+    catch (CRedisException& ex)
+    {
+        if (ERROR_NIL == ex.errcode())
+            return false;
+        throw;
+    }
 }
 
 int CRedisClient::lpush(const std::string& key, const std::string& value, std::pair<std::string, uint16_t>* which) throw (CRedisException)
@@ -1072,10 +1108,19 @@ bool CRedisClient::ltrim(const std::string& key, int64_t start, int64_t end, std
 
 bool CRedisClient::rpop(const std::string& key, std::string* value, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    struct ParamInfo param_info("RPOP", sizeof("RPOP")-1, &key, which);
-    param_info.value = value;
-    int64_t result = redis_command(REDIS_REPLY_STRING, &param_info);
-    return 1 == result;
+    try
+    {
+        struct ParamInfo param_info("RPOP", sizeof("RPOP")-1, &key, which);
+        param_info.value = value;
+        (void)redis_command(REDIS_REPLY_STRING, &param_info);
+        return true;
+    }
+    catch (CRedisException& ex)
+    {
+        if (ERROR_NIL == ex.errcode())
+            return false;
+        throw;
+    }
 }
 
 int CRedisClient::rpush(const std::string& key, const std::string& value, std::pair<std::string, uint16_t>* which) throw (CRedisException)
@@ -1180,11 +1225,20 @@ bool CRedisClient::hsetnxex(const std::string& key, const std::string& field, co
 
 bool CRedisClient::hget(const std::string& key, const std::string& field, std::string* value, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    struct ParamInfo param_info("HGET", sizeof("HGET")-1, &key, which);
-    param_info.str1 = &field;
-    param_info.value = value;
-    int64_t result = redis_command(REDIS_REPLY_STRING, &param_info);
-    return 1 == result;
+    try
+    {
+        struct ParamInfo param_info("HGET", sizeof("HGET")-1, &key, which);
+        param_info.str1 = &field;
+        param_info.value = value;
+        (void)redis_command(REDIS_REPLY_STRING, &param_info);
+        return true;
+    }
+    catch (CRedisException& ex)
+    {
+        if (ERROR_NIL == ex.errcode())
+            return false;
+        throw;
+    }
 }
 
 int64_t CRedisClient::hincrby(const std::string& key, const std::string& field, int64_t increment, std::pair<std::string, uint16_t>* which) throw (CRedisException)
@@ -1656,18 +1710,36 @@ int CRedisClient::zrevrangebyscore(const std::string& key, int64_t min, int64_t 
 
 int CRedisClient::zrank(const std::string& key, const std::string& field, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    struct ParamInfo param_info("ZRANK", sizeof("ZRANK")-1, &key, which);
-    param_info.str1 = &field;
-    int64_t result = redis_command(REDIS_REPLY_INTEGER, &param_info);
-    return static_cast<int>(result);
+    try
+    {
+        struct ParamInfo param_info("ZRANK", sizeof("ZRANK")-1, &key, which);
+        param_info.str1 = &field;
+        int64_t result = redis_command(REDIS_REPLY_INTEGER, &param_info);
+        return static_cast<int>(result);
+    }
+    catch (CRedisException& ex)
+    {
+        if (ERROR_NIL == ex.errcode())
+            return -1;
+        throw;
+    }
 }
 
 int CRedisClient::zrevrank(const std::string& key, const std::string& field, std::pair<std::string, uint16_t>* which) throw (CRedisException)
 {
-    struct ParamInfo param_info("ZREVRANK", sizeof("ZREVRANK")-1, &key, which);
-    param_info.str1 = &field;
-    int64_t result = redis_command(REDIS_REPLY_INTEGER, &param_info);
-    return static_cast<int>(result);
+    try
+    {
+        struct ParamInfo param_info("ZREVRANK", sizeof("ZREVRANK")-1, &key, which);
+        param_info.str1 = &field;
+        int64_t result = redis_command(REDIS_REPLY_INTEGER, &param_info);
+        return static_cast<int>(result);
+    }
+    catch (CRedisException& ex)
+    {
+        if (ERROR_NIL == ex.errcode())
+            return -1;
+        throw;
+    }
 }
 
 int64_t CRedisClient::zscore(const std::string& key, const std::string& field, std::pair<std::string, uint16_t>* which) throw (CRedisException)
@@ -1807,15 +1879,21 @@ const redisReply* CRedisClient::redis_command(int excepted_reply_type, std::pair
             redis_reply = (redisReply*)redisCommandArgv(redis_context, argc, argv, argv_len);
         if (NULL == redis_reply)
         {
+            const int old_errno = errno;
+
             // disconnnected
             errcode = ERROR_COMMAND;
-            errmsg = format_string("redis `%s` error", command);
-            (*g_error_log)("[%s:%d][%d/%d][%s][%s:%d](%d)%s|(%d, %d)%s\n", __FILE__, __LINE__, i, _retry_times, command, node.first.c_str(), node.second, errcode, errmsg.c_str(), errno, redis_context->err, redis_context->errstr);
+            if (0 == redis_context->err)
+                errmsg = format_string("redis `%s` error(%d)", command, old_errno);
+            else
+                errmsg = format_string("redis `%s` error(%d): (%d)%s", command, old_errno, redis_context->err, redis_context->errstr);
+            (*g_error_log)("[%s:%d][%d/%d][%s][%s:%d](%d)%s|(%d, %d)%s\n", __FILE__, __LINE__, i, _retry_times, command, node.first.c_str(), node.second, errcode, errmsg.c_str(), old_errno, redis_context->err, redis_context->errstr);
 
-            if ((EAGAIN == errno) || (EWOULDBLOCK == errno))
+            if ((EAGAIN == old_errno) || (EWOULDBLOCK == old_errno))
             {
                 // Resource temporarily unavailable
                 // 对于超时，不能重试，也许成功了，结果是不确定的！！！
+                //reset_redis_context(slot);
                 break;
             }
             else
@@ -1850,21 +1928,31 @@ const redisReply* CRedisClient::redis_command(int excepted_reply_type, std::pair
                 freeReplyObject(redis_reply);
                 redis_reply = NULL;
 
-                // CLUSTERDOWN The cluster is down (while master is down) （需重试错误）
-                // WRONGTYPE Operation against a key holding the wrong kind of value （此种错误时不需重试）
-                // LOADING Redis is loading the dataset in memory （需重试错误）
-                // MOVED 6474 127.0.0.1:6380 （需重试错误）
+                // CLUSTERDOWN The cluster is down (while master is down)（需重试错误）
+                // WRONGTYPE Operation against a key holding the wrong kind of value（此种错误时不需重试）
+                // LOADING Redis is loading the dataset in memory（需重试错误）
+                // MOVED 6474 127.0.0.1:6380（需重试错误）
                 // ERR wrong number of arguments for 'sadd' command|(0)（此种错误时不需重试）
+                // ERR Error running script (call to f_9b8bd9adab23a1c5fb1a5142b577a0e7b4cb166d): @user_script:1: @user_script: 1: Lua script attempted to access a non local key in a cluster node（需重试错误）
                 // NOSCRIPT No matching script. Please use EVAL.
                 (*g_error_log)("[%s:%d][%d/%d][%s][%s:%d](%d)%s|(%d)%s\n", __FILE__, __LINE__, i, _retry_times, command, node.first.c_str(), node.second, errcode, errmsg.c_str(), redis_context->err, redis_context->errstr);
-                if ((0 == strncmp(errmsg.c_str(), "WRONGTYPE", sizeof("WRONGTYPE")-1)) ||
-                    (0 == strncmp(errmsg.c_str(), "ERR", sizeof("ERR")-1)))
+                if (0 == strncmp(errmsg.c_str(), "WRONGTYPE", sizeof("WRONGTYPE")-1))
                 {
                     break;
                 }
                 else if (0 == strncmp(errmsg.c_str(), "NOSCRIPT", sizeof("NOSCRIPT")-1))
                 {
                     errcode = ERROR_NOSCRIPT;
+                    break;
+                }
+                else if (0 == strncmp(errmsg.c_str(), "ERR", sizeof("ERR")-1))
+                {
+                    // eval will not return MOVED when slot is not right
+                    // ERR Error running script (call to f_9b8bd9adab23a1c5fb1a5142b577a0e7b4cb166d): @user_script:1: @user_script: 1: Lua script attempted to access a non local key in a cluster node（需重试错误）
+                    if (0 == strncasecmp(command, "eval", sizeof("eval")-1))
+                    {
+                        init();
+                    }
                     break;
                 }
                 else
@@ -1909,18 +1997,38 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     size_t* argv_len = new size_t[argc];
     std::string str;
 
+    // check command
+    if (param_info->command_length <= 0)
+    {
+        (*g_error_log)("[%s:%d] invalid command: command size is zero\n", __FILE__, __LINE__);
+        THROW_REDIS_EXCEPTION(ERROR_INVALID_COMMAND, "command size is zero");
+    }
+
+    // check key
+    if ((*param_info->key).size() <= 0)
+    {
+        (*g_error_log)("[%s:%d] invalid command(%s): key size is zero\n", __FILE__, __LINE__, param_info->command);
+        THROW_REDIS_EXCEPTION(ERROR_ZERO_KEY, "key size is zero");
+    }
+
     // command
     argv_len[index] = param_info->command_length;
-    argv[index] = new char[argv_len[index]];
-    memcpy(argv[index], param_info->command, argv_len[index]);
+    if (argv_len[index] > 0)
+    {
+        argv[index] = new char[argv_len[index]];
+        memcpy(argv[index], param_info->command, argv_len[index]);
+    }
     ++index;
 
     // key
     if (param_info->key != NULL)
     {
         argv_len[index] = (*param_info->key).size();
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], (*param_info->key).c_str(), argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], (*param_info->key).c_str(), argv_len[index]);
+        }
         ++index;
     }
 
@@ -1928,8 +2036,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     if (param_info->str1 != NULL)
     {
         argv_len[index] = (*param_info->str1).size();
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], (*param_info->str1).c_str(), argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], (*param_info->str1).c_str(), argv_len[index]);
+        }
         ++index;
     }
 
@@ -1937,8 +2048,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     if (param_info->str2 != NULL)
     {
         argv_len[index] = (*param_info->str2).size();
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], (*param_info->str2).c_str(), argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], (*param_info->str2).c_str(), argv_len[index]);
+        }
         ++index;
     }
 
@@ -1946,8 +2060,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     if (param_info->str3 != NULL)
     {
         argv_len[index] = (*param_info->str3).size();
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], (*param_info->str3).c_str(), argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], (*param_info->str3).c_str(), argv_len[index]);
+        }
         ++index;
     }
 
@@ -1955,8 +2072,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     if (param_info->str4 != NULL)
     {
         argv_len[index] = (*param_info->str4).size();
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], (*param_info->str4).c_str(), argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], (*param_info->str4).c_str(), argv_len[index]);
+        }
         ++index;
     }
 
@@ -1964,8 +2084,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     if (param_info->str5 != NULL)
     {
         argv_len[index] = (*param_info->str5).size();
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], (*param_info->str5).c_str(), argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], (*param_info->str5).c_str(), argv_len[index]);
+        }
         ++index;
     }
 
@@ -1975,8 +2098,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
         for (i=0; i<param_info->array->size(); ++i)
         {
             argv_len[index] = (*param_info->array)[i].size();
-            argv[index] = new char[argv_len[index]];
-            memcpy(argv[index], (*param_info->array)[i].c_str(), argv_len[index]);
+            if (argv_len[index] > 0)
+            {
+                argv[index] = new char[argv_len[index]];
+                memcpy(argv[index], (*param_info->array)[i].c_str(), argv_len[index]);
+            }
             ++index;
         }
     }
@@ -1987,13 +2113,19 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
         for (std::map<std::string, std::string>::const_iterator c_iter=(*param_info->in_map1).begin(); c_iter!=(*param_info->in_map1).end(); ++c_iter)
         {
             argv_len[index] = c_iter->first.size();
-            argv[index] = new char[argv_len[index]];
-            memcpy(argv[index], c_iter->first.c_str(), argv_len[index]);
+            if (argv_len[index] > 0)
+            {
+                argv[index] = new char[argv_len[index]];
+                memcpy(argv[index], c_iter->first.c_str(), argv_len[index]);
+            }
             ++index;
 
             argv_len[index] = c_iter->second.size();
-            argv[index] = new char[argv_len[index]];
-            memcpy(argv[index], c_iter->second.c_str(), argv_len[index]);
+            if (argv_len[index] > 0)
+            {
+                argv[index] = new char[argv_len[index]];
+                memcpy(argv[index], c_iter->second.c_str(), argv_len[index]);
+            }
             ++index;
         }
     }
@@ -2006,14 +2138,20 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
             // score
             str = any2string(c_iter->second);
             argv_len[index] = str.size();
-            argv[index] = new char[argv_len[index]];
-            memcpy(argv[index], str.c_str(), argv_len[index]);
+            if (argv_len[index] > 0)
+            {
+                argv[index] = new char[argv_len[index]];
+                memcpy(argv[index], str.c_str(), argv_len[index]);
+            }
             ++index;
 
             // value
             argv_len[index] = c_iter->first.size();
-            argv[index] = new char[argv_len[index]];
-            memcpy(argv[index], c_iter->first.c_str(), argv_len[index]);
+            if (argv_len[index] > 0)
+            {
+                argv[index] = new char[argv_len[index]];
+                memcpy(argv[index], c_iter->first.c_str(), argv_len[index]);
+            }
             ++index;
         }
     }
@@ -2022,8 +2160,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     if (param_info->str6 != NULL)
     {
         argv_len[index] = param_info->str6->size();
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], param_info->str6->c_str(), argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], param_info->str6->c_str(), argv_len[index]);
+        }
         ++index;
     }
 
@@ -2031,8 +2172,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     if (param_info->str7)
     {
         argv_len[index] = param_info->str7->size();
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], param_info->str7->c_str(), argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], param_info->str7->c_str(), argv_len[index]);
+        }
         ++index;
     }
 
@@ -2040,8 +2184,11 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
     if (param_info->tag != NULL)
     {
         argv_len[index] = param_info->tag_length;
-        argv[index] = new char[argv_len[index]];
-        memcpy(argv[index], param_info->tag, argv_len[index]);
+        if (argv_len[index] > 0)
+        {
+            argv[index] = new char[argv_len[index]];
+            memcpy(argv[index], param_info->tag, argv_len[index]);
+        }
         ++index;
     }
 
@@ -2211,6 +2358,17 @@ int64_t CRedisClient::redis_command(int excepted_reply_type, struct ParamInfo* p
                 } // hmget
             } // hmget & hgetall
         }
+        else if (REDIS_REPLY_NIL == redis_reply->type)
+        {
+            (*g_debug_log)("[%s:%d] reply nil, command[%s]\n", __FILE__, __LINE__, param_info->command);
+            THROW_REDIS_EXCEPTION(ERROR_NIL, "reply nil");
+        }
+        else
+        {
+            result = -1;
+            (*g_error_log)("[%s:%d] unknown reply type: %d, command[%s]\n", __FILE__, __LINE__, redis_reply->type, param_info->command);
+            THROW_REDIS_EXCEPTION(ERROR_UNKNOWN_REPLY_TYPE, "unknown reply type");
+        }
 
         freeReplyObject(const_cast<redisReply*>(redis_reply));
         redis_reply = NULL;
@@ -2329,28 +2487,42 @@ redisContext* CRedisClient::get_redis_context(unsigned int slot, std::pair<std::
                 redis_context = redisConnectWithTimeout(node->first.c_str(), node->second, connect_timeout);
             }
 
-			
-
-            _redis_context = redis_context;
             if (NULL == redis_context)
             {
                 (*g_error_log)("[%s:%d][standalone]redisConnect failed\n", __FILE__, __LINE__, slot);
             }
-            else if (_data_timeout_milliseconds > 0)
+            else
             {
-				if(_password.size() > 0)
-				{
-					redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
-					if (NULL == redis_reply)
-					{
-						(*g_error_log)("[%s:%d]auth failure\n", __FILE__, __LINE__);		
-					}
+                if (_password.size() > 0)
+                {
+                    redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
+                    if (NULL == redis_reply)
+                    {
+                        (*g_error_log)("[%s:%d]auth failure, err=%s\n",
+                            __FILE__, __LINE__, redis_context->errstr);
+                        redisFree(redis_context);
+                        return NULL;
+                    }
+                    if (REDIS_REPLY_STATUS != redis_reply->type || 0 != strcasecmp(redis_reply->str, "OK"))
+                    {
+                        (*g_error_log)("[%s:%d]auth failure, reply err=%s\n",
+                            __FILE__, __LINE__, redis_reply->str);
+                        freeReplyObject(redis_reply);
+                        redisFree(redis_context);
+                        return NULL;
+                    }
+                    freeReplyObject(redis_reply);
+                }
 
-				}
-                struct timeval data_timeout;
-                data_timeout.tv_sec = _data_timeout_milliseconds / 1000;
-                data_timeout.tv_usec = (_data_timeout_milliseconds % 1000) * 1000;
-                redisSetTimeout(redis_context, data_timeout);
+                if (_data_timeout_milliseconds > 0)
+                {
+                    struct timeval data_timeout;
+                    data_timeout.tv_sec = _data_timeout_milliseconds / 1000;
+                    data_timeout.tv_usec = (_data_timeout_milliseconds % 1000) * 1000;
+                    redisSetTimeout(redis_context, data_timeout);
+                }
+
+                _redis_context = redis_context;
             }
         }
     }
@@ -2405,18 +2577,27 @@ redisContext* CRedisClient::get_redis_context(unsigned int slot, std::pair<std::
                             (*g_error_log)("[%s:%d]slot[%u] redisConnect failed\n", __FILE__, __LINE__, slot);
                         }
                         else
-                        {                            
-							if(_password.size() > 0)
-							{
-								redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
-								if (NULL == redis_reply)
-								{
-									(*g_error_log)("[%s:%d]auth failure\n", __FILE__, __LINE__);		
-								}
-
-							}
-                            slot_info->redis_context = redis_context;
-                            _redis_contexts.insert(std::make_pair(slot_info->node, redis_context));
+                        {
+                            if (_password.size() > 0)
+                            {
+                                redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
+                                if (NULL == redis_reply)
+                                {
+                                    (*g_error_log)("[%s:%d]auth failure, err=%s\n",
+                                        __FILE__, __LINE__, redis_context->errstr);
+                                    redisFree(redis_context);
+                                    return NULL;
+                                }
+                                if (REDIS_REPLY_STATUS != redis_reply->type || 0 != strcasecmp(redis_reply->str, "OK"))
+                                {
+                                    (*g_error_log)("[%s:%d]auth failure, reply err=%s\n",
+                                        __FILE__, __LINE__, redis_reply->str);
+                                    freeReplyObject(redis_reply);
+                                    redisFree(redis_context);
+                                    return NULL;
+                                }
+                                freeReplyObject(redis_reply);
+                            }
 
                             if (_data_timeout_milliseconds > 0)
                             {
@@ -2425,6 +2606,9 @@ redisContext* CRedisClient::get_redis_context(unsigned int slot, std::pair<std::
                                 data_timeout.tv_usec = (_data_timeout_milliseconds % 1000) * 1000;
                                 redisSetTimeout(redis_context, data_timeout);
                             }
+
+                            slot_info->redis_context = redis_context;
+                            _redis_contexts.insert(std::make_pair(slot_info->node, redis_context));
                         }
                     }
                 } // if (slot_info->redis_context != NULL)
@@ -2485,12 +2669,23 @@ redisContext* CRedisClient::connect_node(int* errcode, std::string* errmsg, std:
         {
 			if(_password.size() > 0)
 			{
-				redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
-				if (NULL == redis_reply)
-				{
-					(*g_error_log)("[%s:%d]auth failure\n", __FILE__, __LINE__);		
-				}
-
+                redisReply* redis_reply = (redisReply*)redisCommand(redis_context, "auth %s", _password.c_str());
+                if (NULL == redis_reply)
+                {
+                    (*g_error_log)("[%s:%d]redisCommand auth failed, err=%s\n",
+                        __FILE__, __LINE__, redis_context->errstr);
+                    redisFree(redis_context);
+                    return NULL;
+                }
+                if (REDIS_REPLY_STATUS != redis_reply->type || 0 != strcasecmp(redis_reply->str, "OK"))
+                {
+                    (*g_error_log)("[%s:%d][standalone]redisCommand auth failed, reply err=%s\n",
+                        __FILE__, __LINE__, redis_reply->str);
+                    freeReplyObject(redis_reply);
+                    redisFree(redis_context);
+                    return NULL;
+                }
+                freeReplyObject(redis_reply);
 			}
             if (0 == redis_context->err)
             {
@@ -2579,6 +2774,22 @@ void CRedisClient::retry_sleep() const
 {
     if (_retry_sleep_milliseconds > 0)
         millisleep(_retry_sleep_milliseconds);
+}
+
+void CRedisClient::reset_redis_context(unsigned int slot)
+{
+    if (slot < CLUSTER_SLOTS)
+    {
+        struct SlotInfo* slot_info = _slots[slot];
+        if (slot_info != NULL)
+        {
+            if (slot_info->redis_context != NULL)
+            {
+                redisFree(slot_info->redis_context);
+                slot_info->redis_context = NULL;
+            }
+        }
+    }
 }
 
 } // namespace r3c {
