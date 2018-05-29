@@ -9,6 +9,7 @@
 LIBNAME=libr3c
 CMD=r3c_cmd
 TEST=r3c_test
+STRESS=r3c_stress
 
 HIREDIS?=/usr/local/hiredis
 PREFIX?=/usr/local
@@ -24,7 +25,7 @@ INSTALL_LIBRARY_PATH= $(PREFIX)/$(LIBRARY_PATH)
 INSTALL?= cp -a
 
 #OPTIMIZATION?=-O3
-DEBUG?= -g -ggdb
+DEBUG?= -g -ggdb # -DSLEEP_USE_POLL=1
 WARNINGS=-Wall -W -Wwrite-strings
 REAL_CPPFLAGS=$(CPPFLAGS) $(ARCH) -I$(HIREDIS)/include -D__STDC_FORMAT_MACROS=1 -fstrict-aliasing -fPIC $(DEBUG) $(OPTIMIZATION) $(WARNINGS)
 REAL_LDFLAGS=$(LDFLAGS) $(ARCH) $(HIREDIS)/lib/libhiredis.a
@@ -34,19 +35,20 @@ STLIBSUFFIX=a
 STLIBNAME=$(LIBNAME).$(STLIBSUFFIX)
 STLIB_MAKE_CMD=ar rcs
 
-all: $(STLIBNAME) $(CMD) $(TEST)
+all: $(STLIBNAME) $(CMD) $(TEST) $(STRESS)
 
 # Deps (use make dep to generate this)
-crc16.o: crc16.cpp
 sha1.o: sha1.cpp
+utils.o: utils.cpp utils.h
 r3c.o: r3c.cpp r3c.h
-r3c_cmd.o: r3c_cmd.cpp r3c.h
-r3c_test.o: r3c_test.cpp r3c.h
+r3c_cmd.o: r3c_cmd.cpp r3c.h utils.cpp
+r3c_test.o: r3c_test.cpp r3c.h utils.cpp
+r3c_stress.o: r3c_stress.cpp r3c.h utils.cpp
 
 %.o: %.cpp
 	$(CXX) -c $< $(REAL_CPPFLAGS)
 
-$(STLIBNAME): crc16.o sha1.o r3c.o
+$(STLIBNAME): sha1.o utils.o r3c.o
 	rm -f $@;$(STLIB_MAKE_CMD) $@ $^
 
 $(CMD): r3c_cmd.o $(STLIBNAME)
@@ -55,8 +57,11 @@ $(CMD): r3c_cmd.o $(STLIBNAME)
 $(TEST): r3c_test.o $(STLIBNAME)
 	$(CXX) -o $@ $^ $(REAL_LDFLAGS)
 
+$(STRESS): r3c_stress.o $(STLIBNAME)
+	$(CXX) -o $@ $^ $(REAL_LDFLAGS)
+	
 clean:
-	rm -f $(STLIBNAME) $(CMD) $(TEST) *.o core core.*
+	rm -f $(STLIBNAME) $(CMD) $(TEST) $(STRESS) *.o core core.*
 
 install:
 	mkdir -p $(INSTALL_BIN)
